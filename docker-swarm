@@ -1,0 +1,193 @@
+#!/usr/bin/bash
+
+set -e
+
+BLUE=$(tput setaf 21)
+reset=$(tput sgr0)
+defaultMemory=2048
+version=1.0.0
+
+docker_swarm_help()
+{
+printf "
+$BLUE
+#####################################
+# Docker-Swarm Help 	            #
+#####################################
+$reset
+docker-swarm version: ${version}
+	
+Usage:
+  docker-swarm [command] [options]
+
+Options:
+  --help               Display this help message
+  --memory             Memory for each machine, by default 2048MB
+  --workers            Amount of workers to create
+  --managers           Amount of managers to create
+  --workspace          Specify the working directory /host-directory:/guest-directory
+  
+Commands:
+  create               Creates a virtualbox node or nodes
+  scale                Adds more workers or managers to the cluster
+  reduce               Remove workers or managers from the cluster
+  destroy              Shut down and removes all of the machines
+  ls                   Lists all of the machines
+";
+}
+
+docker_swarm_create_options()
+{
+printf "
+${BLUE}
+#####################################
+# Docker-Swarm Help 	            #
+#####################################
+${reset}
+docker-swarm version: ${version}
+	
+Usage:
+  docker-swarm create [options]
+
+Options:
+  --help               Display this help message
+  --memory             Memory for each machine, by default 2048MB
+  --workers            Amount of workers to create
+  --managers           Amount of managers to create
+  --workspace          Specify the working directory /host-directory:/guest-directory
+";
+}
+
+create_node()
+{
+	if [ $(docker-machine ls -q | grep "$1-$2*") ]; then
+		echo "$1-$2 already exists. Are you sure you want to recreate it ?"
+		select yn in "Yes" "No"; do
+		    case $yn in
+		        Yes ) 
+					destroy_node $1-$2 
+				;;
+		        No ) 
+					exit 0
+				;;
+		    esac
+		done
+	fi
+
+	echo "creating $1-$2 with $3MB allocated memory.."
+	#docker-machine create --driver virtualbox --virtualbox-memory "$3" "$1-$2"
+}
+
+create_additional_node()
+{
+	# @todo fetch the lastest created machine and increment the amount.
+}
+
+destroy_node()
+{
+	docker-machine stop $1
+	docker-machine rm $1 --force
+}
+
+destroy_nodes()
+{
+	docker-machine stop $(docker-machine ls -q)
+	docker-machine rm $(docker-machine ls -q)
+}
+
+list_nodes()
+{
+	docker-machine ls
+}
+
+if [ $# -eq 0 ]; then
+	docker_swarm_help
+	exit 0
+fi
+
+
+if [ $1 == "--help" ]
+then
+	docker_swarm_help
+	exit 0
+fi
+
+arguments=("$@")
+
+# Collect commands options
+case $1 in
+	"create")
+	for argument in "${!arguments[@]}"; do	
+		if [ ${arguments[$argument]} == "--help" ]; then
+			docker_swarm_create_options
+			exit 0;
+		fi
+
+		if [ ${arguments[$argument]} == "--managers" ]; then
+			managers=${arguments[$argument+1]}
+		fi
+
+		if [ ${arguments[$argument]} == "--workers" ]; then
+			workers=${arguments[$argument+1]}
+		fi
+
+		if [ ${arguments[$argument]} == "--memory" ]; then
+			memory=${arguments[$argument+1]}
+		fi 
+	done
+	;;
+	"scale")
+	for argument in "${!arguments[@]}"; do	
+		if [ ${arguments[$argument]} == "--managers" ]; then
+			managers=${arguments[$argument+1]}
+		fi
+
+		if [ ${arguments[$argument]} == "--workers" ]; then
+			workers=${arguments[$argument+1]}
+		fi
+	done
+	;;
+esac
+
+# Execute the requested commands
+case $1 in
+	"create")
+	if [ ! -z "$managers" ]; then
+		for ((i=1; i <= $managers; i++)); do
+		    create_node "manager" ${i} ${memory:-$defaultMemory}
+		done
+	fi
+
+	if [ ! -z "$workers" ]; then
+		for ((i=1;i<=$workers;i++)); do
+		    create_node "worker" ${i} ${memory:-$defaultMemory}
+		done
+	fi
+
+	echo "All nodes are up and running!"
+	;;
+	"scale")
+	if [ ! -z "$managers" ]; then
+		for ((i=1; i <= $managers; i++)); do
+		    create_additional_node "manager" ${i} ${memory:-$defaultMemory}
+		done
+	fi
+
+	if [ ! -z "$workers" ]; then
+		for ((i=1;i<=$workers;i++)); do
+			create_additional_node "worker" ${i} ${memory:-$defaultMemory}
+		done
+	fi
+	;;
+	"reduce")
+		# @todo reduce machines
+	;;
+	"destroy")
+		destroy_nodes
+	;;
+	"ls")
+		list_nodes
+	;;
+esac
+
+exit 0
