@@ -1,0 +1,225 @@
+#!/usr/bin/bash
+
+set -e
+
+BLUE=$(tput setaf 21)
+RED=$(tput setaf 1)
+YELLOW=$(tput setaf 3)
+reset=$(tput sgr0)
+defaultMemory=2048
+version=1.0.0
+
+docker_cluster_help()
+{
+printf "
+$BLUE
+#####################################
+# Docker-Cluster Help 	            #
+#####################################
+$reset
+docker-cluster version: ${version}
+	
+Usage:
+  docker-cluster [command] [options]
+
+Options:
+  --help               Display this help message
+  --memory             Memory for each machine, by default 2048MB
+  --workers            Amount of workers to create
+  --workspace          Specify the working directory /host-directory:/guest-directory
+  
+Commands:
+  create               Creates a virtualbox node or nodes
+  scale                Adds more workers to the cluster
+  reduce               Remove workers from the cluster
+  destroy              Shut down and removes all of the machines
+  ls                   Lists all of the machines
+";
+}
+
+docker_cluster_create_options()
+{
+printf "
+${BLUE}
+#####################################
+# Docker-Cluster Help 	            #
+#####################################
+${reset}
+docker-cluster version: ${version}
+	
+Usage:
+  docker-cluster create [options]
+
+Options:
+  --help               Display this help message
+  --memory             Memory for each machine, by default 2048MB
+  --workers            Amount of workers to create
+  --workspace          Specify the working directory /host-directory:/guest-directory
+";
+}
+
+console()
+{
+	echo ""
+
+	case $1 in
+		"info")
+			echo ">>> $2"
+		;;
+		"error")
+			echo "$RED>>> $2 $reset"
+		;;
+		"warning")
+			echo "$YELLOW>>> $2 $reset"
+		;;
+	esac
+}
+
+create_manager()
+{
+	if [ $(docker-machine ls -q | grep "$1") ]; then
+		echo "a manager already exists. Are you sure you want to recreate it ?"
+		select yn in "Yes" "No"; do
+		    case $yn in
+		        Yes )
+					destroy_node "manager"
+				;;
+		        No )
+					exit 0
+				;;
+		    esac
+		done
+	fi
+
+	console "info" "creating a manager node with $1MB allocated memory.."
+	docker-machine create --driver virtualbox --virtualbox-memory "$1" "manager"
+	sleep 1
+	ip=$(docker-machine ip manager)
+	docker-machine ssh manager docker swarm init --advertise-addr "$ip:2377"
+}
+
+create_worker()
+{
+	if [ $(docker-machine ls -q | grep "$1-$2*") ]; then
+		echo "$1-$2 already exists. Are you sure you want to recreate it ?"
+		select yn in "Yes" "No"; do
+		    case $yn in
+		        Yes )
+					destroy_node $1-$2 
+				;;
+		        No )
+					exit 0
+				;;
+		    esac
+		done
+	fi
+
+	console "info" "creating $1-$2 with $3MB allocated memory.."
+	#docker-machine create --driver virtualbox --virtualbox-memory "$3" "$1-$2"
+}
+
+create_additional_node()
+{
+	exit 0
+}
+
+destroy_node()
+{
+	docker-machine stop $1
+	docker-machine rm $1 --force
+}
+
+destroy_nodes()
+{
+	docker-machine stop $(docker-machine ls -q)
+	docker-machine rm $(docker-machine ls -q)
+}
+
+list_nodes()
+{
+	docker-machine ls
+}
+
+if [ $# -eq 0 ]; then
+	docker_cluster_help
+	exit 1
+fi
+
+commandName=$1
+
+shift
+
+options=("$@")
+
+# Collect commands options
+case $commandName in
+	"create")
+		for option in ${!options[@]}; do
+			if [[ "${options[$option]}" == "--"* ]]; then		
+				case "${options[$option]}" in 
+					"--help")
+						docker_cluster_create_options
+						exit 0
+					;;
+					"--workers")
+						workers=${options[$option+1]}
+					;;
+					"--memory")
+						memory=${options[$option+1]}
+					;;
+					"--wor"|"--worke"|"--worker")
+						console "warning" "Unkown option..did you mean --workers [n] ?"
+						docker_cluster_create_options
+						exit 1
+					;;
+					"--mem"|"--memo"|"--memor")
+						console "warning" "Unkown option..did you mean --memory [n] ?"
+						docker_cluster_create_options
+						exit 1
+					;;
+				esac
+			fi
+		done
+	;;
+	"scale")
+		for argument in "${!arguments[@]}"; do	
+			if [ ${arguments[$argument]} == "--workers" ]; then
+				workers=${arguments[$argument+1]}
+			fi
+		done
+	;;
+esac
+
+# Execute the requested commands
+case $commandName in
+	"create")
+		if [ ! -z "$workers" ]; then
+			create_manager ${memory:-$defaultMemory}
+			console "info" "Manager machine is up and running!"
+
+			for ((i=1;i<=$workers;i++)); do
+			    create_worker "worker" ${i} ${memory:-$defaultMemory}
+			done
+
+			console "info" "All workers are up and running!"
+		fi
+	;;
+	"scale")
+		if [ ! -z "$workers" ]; then
+			for ((i=1;i<=$workers;i++)); do
+				create_additional_node "worker" ${i} ${memory:-$defaultMemory}
+			done
+		fi
+	;;
+	"reduce")
+		# @todo reduce machines
+	;;
+	"destroy")
+		destroy_nodes
+	;;
+	"ls")
+		list_nodes
+	;;
+esac
+
+exit 0
