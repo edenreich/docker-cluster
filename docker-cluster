@@ -105,11 +105,11 @@ create_worker()
 		select yn in "Yes" "No"; do
 		    case $yn in
 		        Yes )
-					destroy_node $1-$2 
-				;;
+				destroy_node $1-$2 
+			;;
 		        No )
-					exit 0
-				;;
+				exit 0
+			;;
 		    esac
 		done
 	fi
