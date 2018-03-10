@@ -24,14 +24,10 @@ Usage:
 
 Options:
   --help               Display this help message
-  --memory             Memory for each machine, by default 2048MB
-  --workers            Amount of workers to create
-  --workspace          Specify the working directory /host-directory:/guest-directory
   
 Commands:
-  create               Creates a virtualbox node or nodes
+  create               Creates a manager, workers or clients, by default only manager
   scale                Adds more workers to the cluster
-  reduce               Remove workers from the cluster
   destroy              Shut down and removes all of the machines
   ls                   Lists all of the machines
 ";
@@ -55,7 +51,44 @@ Options:
   --memory             Memory for each machine, by default 2048MB
   --workers            Amount of workers to create
   --workspace          Specify the working directory /host-directory:/guest-directory
+  --clients            Creates a machine with apache benchmark for testing the cluster.
 ";
+}
+
+docker_cluster_scale_options()
+{
+printf "
+${BLUE}
+#####################################
+# Docker-Cluster Help 	            #
+#####################################
+${reset}
+docker-cluster version: ${version}
+	
+Usage:
+  docker-cluster scale [options]
+
+Options:
+  --workers            Amount of additonal workers needed
+";
+}
+
+docker_cluster_destroy_help()
+{
+printf "
+${BLUE}
+#####################################
+# Docker-Cluster Help 	            #
+#####################################
+${reset}
+docker-cluster version: ${version}
+	
+Usage:
+  docker-cluster destroy [list of names]
+
+Options:
+  --help               Display this help message
+";	
 }
 
 console()
@@ -81,10 +114,10 @@ create_manager()
 		echo "a manager already exists. Are you sure you want to recreate it ?"
 		select yn in "Yes" "No"; do
 		    case $yn in
-		        Yes )
+		        Yes)
 				destroy_node "manager"
 			;;
-		        No )
+		        No)
 				exit 0
 			;;
 		    esac
@@ -101,26 +134,26 @@ create_manager()
 
 create_worker()
 {
-	if [ $(docker-machine ls -q | grep "$1-$2") ]; then
-		console "info" "$1-$2 already exists. Are you sure you want to recreate it ?"
+	if [ $(docker-machine ls -q | grep "worker-$1") ]; then
+		console "info" "worker-$1 already exists. Are you sure you want to recreate it ?"
 		select yn in "Yes" "No"; do
 		    case $yn in
-		        Yes )
-				destroy_node $1-$2 
+		        Yes)
+				destroy_node "worker-$1"
 			;;
-		        No )
+		        No)
 				exit 0
 			;;
 		    esac
 		done
 	fi
 
-	console "info" "creating $1-$2 with $3MB allocated memory.."
-	docker-machine create --driver virtualbox --virtualbox-memory "$3" "$1-$2"
-	console "info" "Joining $1-$2 to the swarm-cluster.."
+	console "info" "creating worker-$1 with $2MB allocated memory.."
+	docker-machine create --driver virtualbox --virtualbox-memory "$2" "worker-$1"
+	console "info" "Joining worker-$1 to the swarm-cluster.."
 	local joinToken=$(docker-machine ssh manager docker swarm join-token worker -q)
 	local ip=$(docker-machine ip manager)
-	docker-machine ssh "$1-$2" docker swarm join --token "$joinToken" "$ip:2377"
+	docker-machine ssh "worker-$1" docker swarm join --token "$joinToken" "$ip:2377"
 }
 
 create_additional_worker()
@@ -129,10 +162,35 @@ create_additional_worker()
 		local latestWorker=$(docker-machine ls -q | grep worker-* | wc -l)
 		let nextWorker=$((latestWorker+1))
 
-		create_worker "worker" $nextWorker ${memory:-$defaultMemory}
+		create_worker $nextWorker ${memory:-$defaultMemory}
 	else
 		console "info" "Cannot scale without a manager. Run create first"
 	fi
+}
+
+create_client()
+{
+	if [ $(docker-machine ls -q | grep "client-$1") ]; then
+		console "info" "client-$1 already exists. Are you sure you want to recreate it ?"
+		select yn in "Yes" "No"; do
+		    case $yn in
+		        Yes)
+				destroy_node "client-$1"
+			;;
+		        No)
+				exit 0
+			;;
+		    esac
+		done
+	fi
+
+	console "info" "creating client-$1 with $3MB allocated memory.."
+	docker-machine create --driver virtualbox --virtualbox-memory "$2" "client-$1"
+	
+	local ip=$(docker-machine ip manager)
+	console "info" "Setting up the testing client for you.."
+	docker-machine ssh "client-$1" sudo apt-get update>/dev/null && \
+	sudo apt-get install apache2-utils>/dev/null
 }
 
 destroy_node()
@@ -141,15 +199,30 @@ destroy_node()
 	docker-machine rm $1 --force
 }
 
-destroy_nodes()
+destroy_all()
 {
 	docker-machine stop $(docker-machine ls -q)
 	docker-machine rm $(docker-machine ls -q)
 }
 
+destroy()
+{
+	if [ ! "$(docker-machine ls -q | grep "$1")" ]; then
+		console "error" "The name of the machine does not exists!"
+		exit 1
+	else
+		docker-machine ssh $1 docker swarm leave \
+		&& docker-machine stop $1 \
+		&& docker-machine ssh manager docker node rm $1 \
+		&& docker-machine rm $1
+	fi
+}
+
 list_nodes()
 {
 	docker-machine ls
+	echo ""
+	docker-machine ssh manager docker node ls
 }
 
 install_docker_machine_cli()
@@ -223,6 +296,9 @@ case $commandName in
 					"--memory")
 						memory=${options[$option+1]}
 					;;
+					"--clients")
+						clients=${options[$option+1]}
+					;;
 					"--wor"|"--worke"|"--worker")
 						console "warning" "Unkown option. Did you mean --workers [n] ?"
 						docker_cluster_create_options
@@ -230,6 +306,11 @@ case $commandName in
 					;;
 					"--mem"|"--memo"|"--memor")
 						console "warning" "Unkown option. Did you mean --memory [n] ?"
+						docker_cluster_create_options
+						exit 1
+					;;
+					"--cli"|"--clie"|"--clien"|"--client")
+						console "warning" "Unkown option. Did you mean --clients [n] ?"
 						docker_cluster_create_options
 						exit 1
 					;;
@@ -241,15 +322,39 @@ case $commandName in
 		for option in ${!options[@]}; do	
 			if [[ "${options[$option]}" == "--"* ]]; then
 				case "${options[$option]}" in
+					"--help")
+						docker_cluster_scale_options
+						exit 0
+					;;
 					"--workers")
 						workers=${options[$option+1]}
+					;;
+					"--wor"|"--worke"|"--worker")
+						console "warning" "Unkown option. Did you mean --workers [n] ?"
+						docker_cluster_scale_options
+						exit 1
 					;;
 				esac
 			fi
 		done
 	;;
-	"destroy"|"ls")
-
+	"destroy")
+		for option in ${!options[@]}; do	
+			case "${options[$option]}" in
+				"--help")
+					docker_cluster_destroy_help
+				;;
+				"all")
+					names="all"
+				;;
+				*)
+					names=${options[@]}
+				;;
+			esac
+		done
+	;;
+	"ls")
+		
 	;;
 	*)
 		docker_cluster_help
@@ -259,30 +364,49 @@ esac
 
 # Execute the requested commands
 case $commandName in
-	"create")
-		create_manager ${memory:-$defaultMemory}
-		console "info" "Manager machine is up and running!"
+	"create") # create manager, workers, clients
+		if [ ! "$(docker-machine ls -q | grep manager)" ]; then
+			create_manager ${memory:-$defaultMemory}
+			console "info" "Manager machine is up and running!"
+		fi
 
 		if [ ! -z "$workers" ]; then
-			for ((i=1;i<=$workers;i++)); do
-			    create_worker "worker" ${i} ${memory:-$defaultMemory}
+			for ((i=1; i <= $workers; i++)); do
+			    create_worker ${i} ${memory:-$defaultMemory}
 			done
 
 			console "info" "All workers are up and running!"
 		fi
+
+		if [ ! -z "$clients" ]; then
+			for ((i=1; i <= $clients; i++)); do
+			    create_client ${i} ${memory:-$defaultMemory}
+			done
+
+			console "info" "All clients are up and running!"
+		fi
 	;;
-	"scale")
+	"scale") # scales the amount of workers
 		if [ ! -z "$workers" ]; then
-			for ((i=1;i<=$workers;i++)); do
+			console "info" "creating additonal ${workers} workers and joining them to the cluster.."
+			for ((i=1; i <= $workers; i++)); do
 				create_additional_worker ${memory:-$defaultMemory}
 			done
 		fi
 	;;
-	"reduce")
-		# @todo reduce machines
-	;;
 	"destroy")
-		destroy_nodes
+		if [ ! -z "$names" ]; then
+			case $names in
+				"all")
+					destroy_all
+				;;
+				*)
+					for name in $names; do 
+						destroy $name
+					done
+				;;	
+			esac
+		fi
 	;;
 	"ls")
 		list_nodes
