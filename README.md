@@ -1,5 +1,12 @@
-# docker-cluster
-Helps to create, destroy, scale, reduce a docker-swarm locally
+<p align="center"><img src="https://s17.postimg.org/kwyw37sxb/0_Hl-1_BN46_JLi_Th8_UM.png"></p>
+
+# Docker-cluster
+
+Helps to create, destroy, scale, remove a docker-swarm locally
+
+# Requirements
+
+This assumed you have virtualbox installed.
 
 # Installation
 
@@ -49,3 +56,7 @@ To remove all of the machines run:
 docker-cluster destroy all
 ```
 This command will delete all existing docker machines
+
+# Bugs Reporting
+
+Please feel free to report any bugs you find :)
