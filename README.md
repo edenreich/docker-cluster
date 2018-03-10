@@ -3,11 +3,10 @@ Helps to create, destroy, scale, reduce a docker-swarm locally
 
 # Installation
 
-Run to add the script to your system path
+Run the following to add the script to your system path
 ```sh
 cp ./bin/docker-cluster $HOME/bin
 ```
-Or run the following command using bash:
 
 Then run:
 ```sh
