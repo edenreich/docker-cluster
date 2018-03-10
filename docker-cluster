@@ -115,7 +115,7 @@ create_worker()
 	fi
 
 	console "info" "creating $1-$2 with $3MB allocated memory.."
-	#docker-machine create --driver virtualbox --virtualbox-memory "$3" "$1-$2"
+	docker-machine create --driver virtualbox --virtualbox-memory "$3" "$1-$2"
 }
 
 create_additional_node()
@@ -139,6 +139,50 @@ list_nodes()
 {
 	docker-machine ls
 }
+
+install_docker_machine_cli()
+{
+	local OS=$OSTYPE || $OS
+
+	case $OS in
+		"windows"*|"msys"* )
+			if [[ ! -d "$HOME/bin" ]]; then 
+				mkdir -p "$HOME/bin"; 
+			fi
+				
+			curl -L https://github.com/docker/machine/releases/download/v0.14.0/docker-machine-Windows-x86_64.exe > "$HOME/bin/docker-machine.exe"
+			chmod +x "$HOME/bin/docker-machine.exe"
+		;;
+		"darwin"* )
+			curl -L https://github.com/docker/machine/releases/download/v0.14.0/docker-machine-`uname -s`-`uname -m` >/usr/local/bin/docker-machine
+  			chmod +x /usr/local/bin/docker-machine
+		;;
+		"linux"* )
+			curl -L https://github.com/docker/machine/releases/download/v0.14.0/docker-machine-`uname -s`-`uname -m` >/tmp/docker-machine
+			sudo install /tmp/docker-machine /usr/local/bin/docker-machine
+		;;
+	esac
+}
+
+ask_to_install()
+{
+	console "info" "docker-machine is a required dependecy and you don't have it installed. Want to install it ?"
+	select yn in "Yes" "No"; do
+	    case $yn in
+	        Yes )
+			install_docker_machine_cli
+			console "info" "docker-machine client has been installed on the system successfuly!"
+		break;;
+	        No )
+			exit 0
+		;;
+	    esac
+	done
+}
+
+if ! [ -x "$(command -v docker-machine)" ]; then
+	ask_to_install
+fi
 
 if [ $# -eq 0 ]; then
 	docker_cluster_help
