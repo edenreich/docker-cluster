@@ -124,7 +124,7 @@ create_manager()
 		done
 	fi
 
-	console "info" "Creating a manager node with $1MB allocated memory.."
+	console "info" "Creating a manager machine with $1MB allocated memory.."
 	docker-machine create --driver virtualbox --virtualbox-memory "$1" "manager"
 	sleep 1
 	console "info" "Manager machine has been created, setting up the swarm-cluster.."
@@ -220,9 +220,13 @@ destroy()
 
 list_nodes()
 {
-	docker-machine ls
-	echo ""
-	docker-machine ssh manager docker node ls
+	if [ "$(docker-machine ls -q)" ]; then
+		docker-machine ls
+		echo ""
+		docker-machine ssh manager docker node ls
+	else
+		console "info" "There are no docker machines running. run docker-cluster create --help"
+	fi
 }
 
 install_docker_machine_cli()
