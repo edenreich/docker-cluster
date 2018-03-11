@@ -1,6 +1,6 @@
-<p align="center"><img src="https://s17.postimg.org/kwyw37sxb/0_Hl-1_BN46_JLi_Th8_UM.png"></p>
+<p align="center"><img src="https://s17.postimg.org/kwyw37sxb/0_Hl-1_BN46_JLi_Th8_UM.png" width="300" height="350"></p>
 
-# Docker-cluster
+# Docker Cluster
 
 Helps to create, destroy, scale, remove a docker-swarm locally
 
