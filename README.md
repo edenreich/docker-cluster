@@ -15,8 +15,7 @@ Clone the repository:
 git clone https://github.com/edenreich/docker-cluster.git && cd docker-cluster
 ```
 
-
-Run the following to add the script to your system path
+Run the following to add the script to your system path.\
 On Windows(assumed you have git bash installed):
 ```sh
 cp ./bin/docker-cluster $HOME/bin
