@@ -31,7 +31,7 @@ Commands:
   create               Creates a manager, workers or clients, by default only manager
   scale                Adds more workers to the cluster
   destroy              Shut down and removes all of the machines
-  ls                   Lists all of the machines
+  ls                   Lists all of the machines, swarm-members and running services
   ssh                  SSH into a given machine name, same as docker-machine ssh
   test                 Sends http requests from the clients to the manager on port 80
 ";
@@ -151,8 +151,8 @@ create_manager()
 	docker-machine create --driver virtualbox --virtualbox-memory "$1" "manager"
 	sleep 1
 
-	#console "info" "Mounting directories..."	
-	#mount_web_directories "manager"
+	console "info" "Mounting manager directories..."	
+	mount_project_directories "manager"
 
 	#console "info" "Installing docker-compose on the manager..."
 	#docker-machine ssh manager sudo curl -L https://github.com/docker/compose/releases/download/1.19.0/docker-compose-`uname -s`-`uname -m` -o /usr/local/bin/docker-compose && sudo chmod +x /usr/local/bin/docker-compose
@@ -161,6 +161,14 @@ create_manager()
 	local ip=$(docker-machine ip manager)
 	docker-machine ssh manager docker swarm init --advertise-addr "$ip:2377">/dev/null
 	eval $(docker-machine env manager)
+}
+
+mount_project_directories()
+{
+	docker-machine stop $1>/dev/null \
+	&& "/c/Program Files/Oracle/VirtualBox/VBoxManage" sharedfolder add $1 --name "project" --hostpath "$(pwd)" --automount>/dev/null \
+	&& docker-machine start $1>/dev/null
+	console "info" "$(pwd) is now available on /project on the ${1} machine."
 }
 
 mount_web_directories()
@@ -284,9 +292,21 @@ destroy()
 list_nodes()
 {
 	if [ "$(docker-machine ls -q)" ]; then
+		echo "
+###############################
+# Running Docker Machines     #
+###############################";
 		docker-machine ls
-		echo ""
+		echo "
+###############################
+# Docker Swarm Members        #
+###############################";
 		docker-machine ssh manager docker node ls
+		echo "
+###############################
+# Running Swarm Services      #
+###############################";
+		docker-machine ssh manager docker service ls
 	else
 		console "info" "There are no docker machines running. Run docker-cluster create --help"
 	fi
