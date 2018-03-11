@@ -22,7 +22,7 @@ cp ./bin/docker-cluster $HOME/bin
 ```
 On Linux
 ```sh
-sudo chmod +x .bin/docker-cluster && sudo cp ./bin/docker-cluster /usr/bin
+sudo chmod +x ./bin/docker-cluster && sudo cp ./bin/docker-cluster /usr/bin
 ```
 
 Then run:
