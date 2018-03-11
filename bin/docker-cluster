@@ -364,8 +364,8 @@ test_cluster()
 		clients=$(docker-machine ls -q | grep "client-*")
 
 		for client in $clients; do
-			console "info" "Sending ${requestsCount} requests from $client..."
-			docker-machine ssh $client docker run --rm jordi/ab ab -k -c 100 -n $requestsCount "http://${managerIp}:80/" &
+			console "info" "Sending ${1} requests from $client to ${managerIp}:$2..."
+			docker-machine ssh $client docker run --rm jordi/ab ab -k -c 100 -n $1 "http://${managerIp}:$2/" &
 		done
 
 		exit 0
@@ -493,6 +493,9 @@ case $commandName in
 					"--requests")
 						requestsCount=${options[$option+1]}
 					;;
+					"--port")
+						testingPort=${options[$option+1]}
+					;;
 					*)
 						docker_cluster_test_options
 						exit 1
@@ -580,7 +583,7 @@ case $commandName in
 	;;
 	"test")
 		if [ ! -z "$requestsCount" ]; then
-			test_cluster $requestsCount
+			test_cluster ${requestsCount:-100} ${testingPort:-80}
 		fi
 	;;
 esac
