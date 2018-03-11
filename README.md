@@ -57,12 +57,15 @@ docker-cluster destroy all
 ```
 This command will delete all existing docker machines
 
-To check your cluster you can run:
+To check the preformance of your cluster you can run:
 ```sh
 docker-cluster create --clients 2
+```
+Then:
+```sh
 docker-cluster test --requests 1000
 ```
-This commands will create 2 client machines and send 2x1000 requests to the manager machine on port 80 
+This commands will create 2 client machines and fire off 2x1000 of 2x100 concurrency requests to the manager machine on port 80 
 
 ## Notes
 

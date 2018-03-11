@@ -73,6 +73,7 @@ Usage:
 
 Options:
   --workers            Amount of additonal workers needed
+  --clients            Amount of additonal clients needed
 ";
 }
 
@@ -138,7 +139,7 @@ create_manager()
 		    case $yn in
 		        Yes)
 				destroy_node "manager"
-			;;
+			break;;
 		        No)
 				exit 0
 			;;
@@ -178,7 +179,7 @@ create_worker()
 		    case $yn in
 		        Yes)
 				destroy_node "worker-$1"
-			;;
+			break;;
 		        No)
 				exit 0
 			;;
@@ -210,6 +211,18 @@ create_additional_worker()
 	fi
 }
 
+create_additional_client()
+{
+	if [ $(docker-machine ls -q | grep "manager") ]; then
+		local latestClient=$(docker-machine ls -q | grep client-* | wc -l)
+		let nextClient=$((latestClient+1))
+
+		create_client $nextClient ${memory:-$defaultMemory}
+	else
+		console "info" "Cannot scale without a manager. Run create first"
+	fi
+}
+
 create_client()
 {
 	if [ $(docker-machine ls -q | grep "client-$1") ]; then
@@ -218,7 +231,7 @@ create_client()
 		    case $yn in
 		        Yes)
 				destroy_node "client-$1"
-			;;
+			break;;
 		        No)
 				exit 0
 			;;
@@ -226,18 +239,23 @@ create_client()
 		done
 	fi
 
-	console "info" "creating client-$1 with $3MB allocated memory..."
+	console "info" "creating client-$1 with $2MB allocated memory..."
 	docker-machine create --driver virtualbox --virtualbox-memory "$2" "client-$1"
 	
 	local ip=$(docker-machine ip manager)
-	console "info" "Setting up the testing client for you..."
+	console "info" "Setting up the client's testing tools..."
 	docker-machine ssh client-$1 docker pull jordi/ab>/dev/null
 }
 
 destroy_node()
 {
-	docker-machine stop $1
-	docker-machine rm $1 --force
+	if [ ! "$(docker-machine ls -q | grep "$1")" ]; then
+		console "error" "The name of the machine does not exists!"
+		exit 1
+	else
+		docker-machine stop $1 \
+		&& docker-machine rm $1 --force
+	fi
 }
 
 destroy_all()
@@ -327,7 +345,7 @@ test_cluster()
 
 		for client in $clients; do
 			console "info" "Sending ${requestsCount} requests from $client..."
-			docker-machine ssh $client docker run --rm jordi/ab ab -k -c 100 -n $requestsCount "http://${managerIp}:80/"
+			docker-machine ssh $client docker run --rm jordi/ab ab -k -c 100 -n $requestsCount "http://${managerIp}:80/" &
 		done
 
 		exit 0
@@ -401,9 +419,17 @@ case $commandName in
 					"--workers")
 						workers=${options[$option+1]}
 					;;
-					"--wor"|"--worke"|"--worker")
+					"--clients")
+						clients=${options[$option+1]}
+					;;
+					"--wor"|"--work"|"--worke"|"--worker")
 						console "warning" "Unkown option. Did you mean --workers [n] ?"
 						docker_cluster_scale_options
+						exit 1
+					;;
+					"--cli"|"--clie"|"--clien"|"--client")
+						console "warning" "Unkown option. Did you mean --clients [n] ?"
+						docker_cluster_create_options
 						exit 1
 					;;
 				esac
@@ -492,16 +518,28 @@ case $commandName in
 				create_additional_worker ${memory:-$defaultMemory}
 			done
 		fi
+
+		if [ ! -z "$clients" ]; then
+			console "info" "creating additonal ${clients} client machines..."
+			for ((i=1; i <= $clients; i++)); do
+				create_additional_client ${memory:-$defaultMemory}
+			done
+		fi
 	;;
 	"destroy")
 		if [ ! -z "$names" ]; then
 			case $names in
 				"all")
 					destroy_all
+					exit 0
 				;;
 				*)
 					for name in $names; do 
-						destroy $name
+						if [[ $name =~ client-* ]]; then
+							destroy_node $name
+						else
+							destroy $name
+						fi
 					done
 				;;	
 			esac
