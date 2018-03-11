@@ -166,7 +166,7 @@ create_manager()
 mount_project_directories()
 {
 	docker-machine stop $1>/dev/null \
-	&& "/c/Program Files/Oracle/VirtualBox/VBoxManage" sharedfolder add $1 --name "project" --hostpath "$(pwd)" --automount>/dev/null \
+	&& "$VBOX_MSI_INSTALL_PATH/VBoxManage" sharedfolder add $1 --name "project" --hostpath "$(pwd)" --automount>/dev/null \
 	&& docker-machine start $1>/dev/null
 	console "info" "$(pwd) is now available on /project on the ${1} machine."
 }
@@ -174,7 +174,7 @@ mount_project_directories()
 mount_web_directories()
 {
 	docker-machine stop $1>/dev/null \
-	&& "/c/Program Files/Oracle/VirtualBox/VBoxManage" sharedfolder add $1 --name "www" --hostpath "$(pwd)/www" --automount>/dev/null \
+	&& "$VBOX_MSI_INSTALL_PATH/VBoxManage" sharedfolder add $1 --name "www" --hostpath "$(pwd)/www" --automount>/dev/null \
 	&& docker-machine start $1>/dev/null
 	console "info" "$(pwd)/www is now available on /www on the ${1} machine."
 }
