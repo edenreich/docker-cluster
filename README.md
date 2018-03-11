@@ -62,7 +62,7 @@ To check your cluster you can run:
 docker-cluster create --clients 2
 docker-cluster test --requests 1000
 ```
-This command will create 2 client machines and send 1000 requests to the manager machine on port 80 
+This commands will create 2 client machines and send 2x1000 requests to the manager machine on port 80 
 
 ## Notes
 
