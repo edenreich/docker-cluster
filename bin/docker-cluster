@@ -111,6 +111,7 @@ Usage:
 Options:
   --help               Display this help message
   --requests           The amount of requests to send to the manager, port 80 by default
+  --port               The port for testing
 ";	
 }
 
