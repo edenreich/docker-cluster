@@ -60,7 +60,7 @@ This command will delete all existing docker machines
 To check your cluster you can run:
 ```sh
 docker-cluster create --clients 2
-docker-cluster test 1000
+docker-cluster test --requests 1000
 ```
 This command will create 2 client machines and send 1000 requests to the manager machine on port 80 
 
