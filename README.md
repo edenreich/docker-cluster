@@ -2,13 +2,13 @@
 
 # Docker Cluster
 
-Helps to create, destroy, scale, remove a docker-swarm locally
+Helps to create, destroy, scale, remove and test a docker-swarm locally.
 
-# Requirements
+## Requirements
 
 This assumed you have virtualbox installed.
 
-# Installation
+## Installation
 
 Run the following to add the script to your system path
 ```sh
@@ -20,7 +20,7 @@ Then run:
 docker-cluster --help
 ```
 
-# Usage
+## Usage
 
 To get started run:
 ```sh
@@ -57,6 +57,18 @@ docker-cluster destroy all
 ```
 This command will delete all existing docker machines
 
-# Bugs Reporting
+To check your cluster you can run:
+```sh
+docker-cluster create --clients 2
+docker-cluster test 1000
+```
+This command will create 2 client machines and send 1000 requests to the manager machine on port 80 
+
+## Notes
+
+The idea behind this tool is to speed up the workflow locally before going to production.
+It has been tested on windows 10 using bash, but might work on linux, mac as well.
+
+## Bugs Reporting
 
 Please feel free to report any bugs you find :)

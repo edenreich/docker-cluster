@@ -2,17 +2,19 @@
 
 set -e
 
-BLUE=$(tput setaf 21)
-RED=$(tput setaf 1)
-YELLOW=$(tput setaf 3)
-reset=$(tput sgr0)
+CYAN="\e[96m"
+RED="\e[91m"
+BGRED="\e[41m"
+YELLOW="\e[93m"
+reset="\e[39m"
+resetBG="\e[49m"
 defaultMemory=2048
 version=1.0.0
 
 docker_cluster_help()
 {
 printf "
-$BLUE
+$CYAN
 #####################################
 # Docker-Cluster Help 	            #
 #####################################
@@ -30,13 +32,15 @@ Commands:
   scale                Adds more workers to the cluster
   destroy              Shut down and removes all of the machines
   ls                   Lists all of the machines
+  ssh                  SSH into a given machine name, same as docker-machine ssh
+  test                 Sends http requests from the clients to the manager on port 80
 ";
 }
 
 docker_cluster_create_options()
 {
 printf "
-${BLUE}
+${CYAN}
 #####################################
 # Docker-Cluster Help 	            #
 #####################################
@@ -50,15 +54,14 @@ Options:
   --help               Display this help message
   --memory             Memory for each machine, by default 2048MB
   --workers            Amount of workers to create
-  --workspace          Specify the working directory /host-directory:/guest-directory
-  --clients            Creates a machine with apache benchmark for testing the cluster.
+  --clients            Creates a machine with apache benchmark tool container for testing the cluster.
 ";
 }
 
 docker_cluster_scale_options()
 {
 printf "
-${BLUE}
+${CYAN}
 #####################################
 # Docker-Cluster Help 	            #
 #####################################
@@ -76,7 +79,7 @@ Options:
 docker_cluster_destroy_help()
 {
 printf "
-${BLUE}
+${CYAN}
 #####################################
 # Docker-Cluster Help 	            #
 #####################################
@@ -91,19 +94,38 @@ Options:
 ";	
 }
 
+docker_cluster_test_options()
+{
+printf "
+${CYAN}
+#####################################
+# Docker-Cluster Help 	            #
+#####################################
+${reset}
+docker-cluster version: ${version}
+	
+Usage:
+  docker-cluster test [option]
+
+Options:
+  --help               Display this help message
+  --requests           The amount of requests to send to the manager, port 80 by default
+";	
+}
+
 console()
 {
 	echo ""
 
 	case $1 in
 		"info")
-			echo ">>> $2"
+			echo -e ">>> $2"
 		;;
 		"error")
-			echo "$RED>>> $2 $reset"
+			echo -e "$BGRED>>> $2 $resetBG"
 		;;
 		"warning")
-			echo "$YELLOW>>> $2 $reset"
+			echo -e "$YELLOW>>> $2 $reset"
 		;;
 	esac
 }
@@ -124,12 +146,28 @@ create_manager()
 		done
 	fi
 
-	console "info" "Creating a manager machine with $1MB allocated memory.."
+	console "info" "Creating a manager machine with $1MB allocated memory..."
 	docker-machine create --driver virtualbox --virtualbox-memory "$1" "manager"
 	sleep 1
-	console "info" "Manager machine has been created, setting up the swarm-cluster.."
+
+	#console "info" "Mounting directories..."	
+	#mount_web_directories "manager"
+
+	#console "info" "Installing docker-compose on the manager..."
+	#docker-machine ssh manager sudo curl -L https://github.com/docker/compose/releases/download/1.19.0/docker-compose-`uname -s`-`uname -m` -o /usr/local/bin/docker-compose && sudo chmod +x /usr/local/bin/docker-compose
+
+	console "info" "Manager machine has been created, setting up the swarm-cluster..."
 	local ip=$(docker-machine ip manager)
 	docker-machine ssh manager docker swarm init --advertise-addr "$ip:2377">/dev/null
+	eval $(docker-machine env manager)
+}
+
+mount_web_directories()
+{
+	docker-machine stop $1>/dev/null \
+	&& "/c/Program Files/Oracle/VirtualBox/VBoxManage" sharedfolder add $1 --name "www" --hostpath "$(pwd)/www" --automount>/dev/null \
+	&& docker-machine start $1>/dev/null
+	console "info" "$(pwd)/www is now available on /www on the ${1} machine."
 }
 
 create_worker()
@@ -148,12 +186,16 @@ create_worker()
 		done
 	fi
 
-	console "info" "creating worker-$1 with $2MB allocated memory.."
+	console "info" "creating worker-$1 with $2MB allocated memory..."
 	docker-machine create --driver virtualbox --virtualbox-memory "$2" "worker-$1"
-	console "info" "Joining worker-$1 to the swarm-cluster.."
+	
+	console "info" "Joining worker-$1 to the swarm-cluster..."
 	local joinToken=$(docker-machine ssh manager docker swarm join-token worker -q)
 	local ip=$(docker-machine ip manager)
 	docker-machine ssh "worker-$1" docker swarm join --token "$joinToken" "$ip:2377"
+
+	#console "info" "Mounting directories..."
+	#mount_web_directories "worker-$1"
 }
 
 create_additional_worker()
@@ -184,13 +226,12 @@ create_client()
 		done
 	fi
 
-	console "info" "creating client-$1 with $3MB allocated memory.."
+	console "info" "creating client-$1 with $3MB allocated memory..."
 	docker-machine create --driver virtualbox --virtualbox-memory "$2" "client-$1"
 	
 	local ip=$(docker-machine ip manager)
-	console "info" "Setting up the testing client for you.."
-	docker-machine ssh "client-$1" sudo apt-get update>/dev/null && \
-	sudo apt-get install apache2-utils>/dev/null
+	console "info" "Setting up the testing client for you..."
+	docker-machine ssh client-$1 docker pull jordi/ab>/dev/null
 }
 
 destroy_node()
@@ -201,8 +242,12 @@ destroy_node()
 
 destroy_all()
 {
-	docker-machine stop $(docker-machine ls -q)
-	docker-machine rm $(docker-machine ls -q)
+	if [ "$(docker-machine ls -q)" ]; then
+		docker-machine stop $(docker-machine ls -q)
+		docker-machine rm $(docker-machine ls -q)
+	else
+		console "info" "There are no docker machines running."
+	fi
 }
 
 destroy()
@@ -225,7 +270,7 @@ list_nodes()
 		echo ""
 		docker-machine ssh manager docker node ls
 	else
-		console "info" "There are no docker machines running. run docker-cluster create --help"
+		console "info" "There are no docker machines running. Run docker-cluster create --help"
 	fi
 }
 
@@ -267,6 +312,29 @@ ask_to_install()
 		;;
 	    esac
 	done
+}
+
+ssh_node()
+{
+	docker-machine ssh $1
+}
+
+test_cluster()
+{
+	if [[ $(docker-machine ls -q | grep "client-*") ]]; then
+		managerIp=$(docker-machine ip manager)
+		clients=$(docker-machine ls -q | grep "client-*")
+
+		for client in $clients; do
+			console "info" "Sending ${requestsCount} requests from $client..."
+			docker-machine ssh $client docker run --rm jordi/ab ab -k -c 100 -n $requestsCount "http://${managerIp}:80/"
+		done
+
+		exit 0
+	else
+		console "error" "There are no client machines running for the test. Run docker-cluster create --clients [n]"
+		exit 1
+	fi
 }
 
 if ! [ -x "$(command -v docker-machine)" ]; then
@@ -360,6 +428,33 @@ case $commandName in
 	"ls")
 		
 	;;
+	"ssh")
+		machine=${options}
+	;;
+	"test")
+		if [[ -z $options ]]; then
+			console "info" "Use one of the following options.."
+			docker_cluster_test_options
+			exit 1
+		fi
+
+		for option in ${!options[@]}; do
+			if [[ "${options[$option]}" == "--"* ]]; then
+				case "${options[$option]}" in
+					"--help")
+						docker_cluster_test_options
+					;;
+					"--requests")
+						requestsCount=${options[$option+1]}
+					;;
+					*)
+						docker_cluster_test_options
+						exit 1
+					;;
+				esac
+			fi
+		done
+	;;
 	*)
 		docker_cluster_help
 		exit 1;
@@ -392,7 +487,7 @@ case $commandName in
 	;;
 	"scale") # scales the amount of workers
 		if [ ! -z "$workers" ]; then
-			console "info" "creating additonal ${workers} workers and joining them to the cluster.."
+			console "info" "creating additonal ${workers} workers and joining them to the cluster..."
 			for ((i=1; i <= $workers; i++)); do
 				create_additional_worker ${memory:-$defaultMemory}
 			done
@@ -410,10 +505,25 @@ case $commandName in
 					done
 				;;	
 			esac
+		else
+			console "info" "Did you mean docker-cluster destroy all ?"
+			exit 1		
 		fi
 	;;
 	"ls")
 		list_nodes
+	;;
+	"ssh")
+		if [[ $machine && $(docker-machine ls -q | grep ^$machine$) ]]; then 
+			ssh_node $machine
+		else
+			console "info" "The machine you specify does not exist. Run docker-cluster ls to list your machines"
+		fi
+	;;
+	"test")
+		if [ ! -z "$requestsCount" ]; then
+			test_cluster $requestsCount
+		fi
 	;;
 esac
 
