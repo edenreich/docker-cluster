@@ -32,8 +32,11 @@ Commands:
   scale                Adds more workers to the cluster
   destroy              Shut down and removes all of the machines
   ls                   Lists all of the machines, swarm-members and running services
-  ssh                  SSH into a given machine name, same as docker-machine ssh
+  ssh                  SSH into a given machine name, alias of docker-machine ssh
   test                 Sends http requests from the clients to the manager on port 80
+  monitor              Opens a grafana on port 3000 in the browser
+  visual               Opens a visualizer on port 3050 in the browser
+  preset               Choose a preset from different compose files (default, load-balancer etc..)
 ";
 }
 
@@ -130,6 +133,30 @@ console()
 			echo -e "$YELLOW>>> $2 $reset"
 		;;
 	esac
+}
+
+
+wait_for_it()
+{
+  	local retry=3
+  	local tries=0
+  	
+  	while (( tries <= retry )); do
+	    
+	    tries=$((tries+1))
+	    
+	    if eval "curl -s $1"; then
+	      echo
+	      return 0
+	    fi
+    
+    	echo -n '.'
+    
+    	sleep 1
+	done
+
+	echo "The requested address is unavailable.."
+	return 1
 }
 
 create_manager()
@@ -290,6 +317,61 @@ destroy()
 	fi
 }
 
+open_browser_on_port()
+{
+	url="http://$1:$2"
+	os="$(uname -s)"
+	
+	case "$os" in
+	    Linux*)     
+			xdg-open $url
+		;;
+	    Darwin*)    
+			open $url
+		;;
+	    MINGW*)  # windows  
+			start $url
+		;;
+	    *)          
+			console info "Could not detect your default browser"
+			exit 1
+	esac
+}
+
+open_monitor()
+{
+	managerIp="$(docker-machine ip manager)"
+	console "info" "Opening grafana at http://${managerIp} on port 3000..."
+	
+	if [ ! "$(docker-machine ssh manager docker ps | grep grafana)" ]; then
+		console "info" "This might take a few seconds, downloading the image..."
+		docker-machine ssh manager docker run -d --name grafana -p 3000:3000 grafana/grafana>/dev/null
+	fi
+
+	if [ "$(wait_for_it http://$managerIp:3000)" ]; then
+		open_browser_on_port $managerIp "3000"
+	fi
+}
+
+open_visualizer()
+{
+	managerIp="$(docker-machine ip manager)"
+	volumes="\/var/run/docker.sock:\/var/run/docker.sock"
+	ports="8080:8080"
+	image="dockersamples/visualizer"
+
+	console "info" "Opening swarm-visualizer at http://${managerIp} on port 8080..."
+
+	if [ ! "$(docker-machine ssh manager docker ps | grep visual)" ]; then
+		console "info" "This might take a few seconds, downloading the image..."
+		docker-machine ssh manager docker run -d -ti --name visual -v $volumes -p $ports $image
+	fi
+	
+	if [ "$(wait_for_it http://$managerIp:8080)" ]; then
+		open_browser_on_port $managerIp "8080"
+	fi
+}
+
 list_nodes()
 {
 	if [ "$(docker-machine ls -q)" ]; then
@@ -308,6 +390,11 @@ list_nodes()
 # Running Swarm Services      #
 ###############################";
 		docker-machine ssh manager docker service ls
+		echo "
+###############################
+# Overall Containers          #
+###############################";
+		docker-machine ssh manager docker ps -a; 
 	else
 		console "info" "There are no docker machines running. Run docker-cluster create --help"
 	fi
@@ -472,9 +559,6 @@ case $commandName in
 			esac
 		done
 	;;
-	"ls")
-		
-	;;
 	"ssh")
 		machine=${options}
 	;;
@@ -504,6 +588,9 @@ case $commandName in
 				esac
 			fi
 		done
+	;;
+	"ls"|"monitor"|"visual")
+		
 	;;
 	*)
 		docker_cluster_help
@@ -586,6 +673,12 @@ case $commandName in
 		if [ ! -z "$requestsCount" ]; then
 			test_cluster ${requestsCount:-100} ${testingPort:-80}
 		fi
+	;;
+	"monitor")
+		open_monitor
+	;;
+	"visual")
+		open_visualizer
 	;;
 esac
 
