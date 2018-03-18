@@ -741,7 +741,7 @@ case $commandName in
 	;;
 	"monitor")
 		if [ ! "$(docker-machine ls -q | grep manager)" ]; then
-			console "info" "First you have to create a manager machine to run the visualizer. Run docker-cluster create [options]"
+			console "info" "First you have to create a manager machine to run the monitor. Run docker-cluster create [options]"
 			exit 1
 		fi
 
