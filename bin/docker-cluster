@@ -36,7 +36,7 @@ Commands:
   ssh                  SSH into a given machine name, alias of docker-machine ssh
   test                 Sends http requests from the clients to the manager on port 80
   monitor              Opens a grafana on port 3000 in the browser
-  visual               Opens a visualizer on port 3050 in the browser
+  visual               Opens a visualizer on port 8080 in the browser
   preset               Choose a preset from different compose files (default, load-balancer etc..)
 ";
 }
@@ -201,9 +201,6 @@ create_manager()
 
 	console "info" "Mounting manager directories..."	
 	mount_project_directories "manager"
-
-	console "info" "Installing docker-compose on the manager..."
-	docker-machine ssh manager sudo ln -s "\/project/dependencies/bin/docker-compose /usr/local/bin/docker-compose"
 
 	console "info" "Manager machine has been created, setting up the swarm-cluster..."
 	local ip=$(docker-machine ip manager)
@@ -370,34 +367,43 @@ open_browser_on_port()
 
 open_monitor()
 {
-	managerIp="$(docker-machine ip manager)"
-	console "info" "Opening grafana at http://${managerIp} on port 3000..."
+	local managerIp="$(docker-machine ip manager)"
+	local ports="3000:3000"
+	local image="grafana/grafana"
 	
 	if [ ! "$(docker-machine ssh manager docker ps | grep grafana)" ]; then
-		console "info" "This might take a few seconds, downloading the image..."
-		docker-machine ssh manager docker run -d --name grafana -p 3000:3000 grafana/grafana>/dev/null
+		if [ ! "$(docker-machine ssh manager docker images | grep -w grafana/grafana)" ]; then
+			console "info" "This might take a few seconds, downloading the image..."
+			docker-machine ssh manager docker pull $image>/dev/null
+		fi
+
+		docker-machine ssh manager docker run -d --name grafana -p $ports $image>/dev/null
 	fi
 
 	if [ "$(wait_for_it http://$managerIp:3000)" ]; then
+		console "info" "Opening grafana at http://${managerIp} on port 3000..."
 		open_browser_on_port $managerIp "3000"
 	fi
 }
 
 open_visualizer()
 {
-	managerIp="$(docker-machine ip manager)"
-	volumes="\/var/run/docker.sock:\/var/run/docker.sock"
-	ports="8080:8080"
-	image="dockersamples/visualizer"
-
-	console "info" "Opening swarm-visualizer at http://${managerIp} on port 8080..."
+	local managerIp="$(docker-machine ip manager)"
+	local volumes="\/var/run/docker.sock:\/var/run/docker.sock"
+	local ports="8080:8080"
+	local image="dockersamples/visualizer"
 
 	if [ ! "$(docker-machine ssh manager docker ps | grep visual)" ]; then
-		console "info" "This might take a few seconds, downloading the image..."
+		if [ ! "$(docker-machine ssh manager docker images | grep -w dockersamples/visualizer)" ]; then
+			console "info" "This might take a few seconds, downloading the image..."
+			docker-machine ssh manager docker pull $image>/dev/null
+		fi
+
 		docker-machine ssh manager docker run -d -ti --name visual -v $volumes -p $ports $image
 	fi
 	
 	if [ "$(wait_for_it http://$managerIp:8080)" ]; then
+		console "info" "Opening swarm-visualizer at http://${managerIp} on port 8080..."
 		open_browser_on_port $managerIp "8080"
 	fi
 }
@@ -724,14 +730,29 @@ case $commandName in
 		fi
 	;;
 	"test")
+		if [ ! "$(docker-machine ls -q | grep manager)" ]; then
+			console "info" "First you have to create a manager machine to run the visualizer. Run docker-cluster create [options]"
+			exit 1
+		fi
+
 		if [ ! -z "$requestsCount" ]; then
 			test_cluster ${requestsCount:-100} ${testingPort:-80}
 		fi
 	;;
 	"monitor")
+		if [ ! "$(docker-machine ls -q | grep manager)" ]; then
+			console "info" "First you have to create a manager machine to run the visualizer. Run docker-cluster create [options]"
+			exit 1
+		fi
+
 		open_monitor
 	;;
 	"visual")
+		if [ ! "$(docker-machine ls -q | grep manager)" ]; then
+			console "info" "First you have to create a manager machine to run the visualizer. Run docker-cluster create [options]"
+			exit 1
+		fi
+
 		open_visualizer
 	;;
 esac
