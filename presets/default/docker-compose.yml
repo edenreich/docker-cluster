@@ -1,0 +1,19 @@
+version: '3'
+
+services: 
+  nginx:
+    image: shippingdocker/nginx:latest
+    deploy:
+      replicas: 2
+    ports:
+     - "80:80"
+    volumes:
+     - ./www:/var/www/html
+  php:
+    image: shippingdocker/php:latest
+    volumes:
+     - ./www:/var/www/html
+
+networks:
+  default:
+    driver: "overlay"

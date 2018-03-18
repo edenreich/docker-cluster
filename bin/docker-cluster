@@ -31,6 +31,7 @@ Commands:
   create               Creates a manager, workers or clients, by default only manager
   scale                Adds more workers to the cluster
   destroy              Shut down and removes all of the machines
+  run                  Runs the stack from a specified preset
   ls                   Lists all of the machines, swarm-members and running services
   ssh                  SSH into a given machine name, alias of docker-machine ssh
   test                 Sends http requests from the clients to the manager on port 80
@@ -98,6 +99,25 @@ Options:
 ";	
 }
 
+docker_cluster_run_options()
+{
+printf "
+${CYAN}
+#####################################
+# Docker-Cluster Help 	            #
+#####################################
+${reset}
+docker-cluster version: ${version}
+	
+Usage:
+  docker-cluster run [option]
+
+Options:
+  --help               Display this help message
+  --preset             The folder name of the preset that should be run
+";
+}
+
 docker_cluster_test_options()
 {
 printf "
@@ -115,7 +135,7 @@ Options:
   --help               Display this help message
   --requests           The amount of requests to send to the manager, port 80 by default
   --port               The port for testing
-";	
+";
 }
 
 console()
@@ -312,6 +332,18 @@ destroy()
 	else
 		docker-machine ssh manager docker node rm $1 --force \
 		&& destroy_node $1
+	fi
+}
+
+execute_preset()
+{
+	directory="\/project/presets"
+
+	if [ $(docker-machine ssh manager "[ -d $directory/$1 ]" && echo "OK") ]; then
+		echo $directory/$1/docker-compose.yml
+		docker-machine ssh manager docker stack deploy -c "$directory/$1/docker-compose.yml" $1
+	else
+		console "error" "The specified preset does not exists!"
 	fi
 }
 
@@ -557,6 +589,25 @@ case $commandName in
 			esac
 		done
 	;;
+	"run")
+		if [[ -z $options ]]; then
+			console "info" "Use one of the following options.."
+			docker_cluster_run_options
+			exit 1
+		fi
+
+		for option in ${!options[@]}; do
+			case "${options[$option]}" in
+				"--help")
+					docker_cluster_run_options
+					exit 0
+				;;
+				"--preset")
+					preset=${options[$option+1]}
+				;;
+			esac
+		done
+	;;
 	"ssh")
 		machine=${options}
 	;;
@@ -655,6 +706,11 @@ case $commandName in
 		else
 			console "info" "Did you mean docker-cluster destroy all ?"
 			exit 1		
+		fi
+	;;
+	"run")
+		if [ ! -z "$preset" ]; then
+			execute_preset ${preset:-default}
 		fi
 	;;
 	"ls")
