@@ -182,8 +182,8 @@ create_manager()
 	console "info" "Mounting manager directories..."	
 	mount_project_directories "manager"
 
-	#console "info" "Installing docker-compose on the manager..."
-	#docker-machine ssh manager sudo curl -L https://github.com/docker/compose/releases/download/1.19.0/docker-compose-`uname -s`-`uname -m` -o /usr/local/bin/docker-compose && sudo chmod +x /usr/local/bin/docker-compose
+	console "info" "Installing docker-compose on the manager..."
+	docker-machine ssh manager sudo ln -s "\/project/dependencies/bin/docker-compose /usr/local/bin/docker-compose"
 
 	console "info" "Manager machine has been created, setting up the swarm-cluster..."
 	local ip=$(docker-machine ip manager)
@@ -290,7 +290,7 @@ destroy_node()
 		exit 1
 	else
 		docker-machine stop $1 \
-		&& docker-machine rm $1 --force
+		&& docker-machine rm $1
 	fi
 }
 
@@ -310,10 +310,8 @@ destroy()
 		console "error" "The name of the machine does not exists!"
 		exit 1
 	else
-		docker-machine ssh $1 docker swarm leave \
-		&& docker-machine stop $1 \
-		&& docker-machine ssh manager docker node rm $1 \
-		&& docker-machine rm $1
+		docker-machine ssh manager docker node rm $1 --force \
+		&& destroy_node $1
 	fi
 }
 
