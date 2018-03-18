@@ -31,13 +31,12 @@ Commands:
   create               Creates a manager, workers or clients, by default only manager
   scale                Adds more workers to the cluster
   destroy              Shut down and removes all of the machines
-  run                  Runs the stack from a specified preset
+  run                  Runs the stack from a specified preset folder
   ls                   Lists all of the machines, swarm-members and running services
   ssh                  SSH into a given machine name, alias of docker-machine ssh
   test                 Sends http requests from the clients to the manager on port 80
   monitor              Opens a grafana on port 3000 in the browser
   visual               Opens a visualizer on port 8080 in the browser
-  preset               Choose a preset from different compose files (default, load-balancer etc..)
 ";
 }
 
@@ -371,12 +370,12 @@ open_monitor()
 	local ports="3000:3000"
 	local image="grafana/grafana"
 	
+	if [ ! "$(docker-machine ssh manager docker images | grep -w grafana/grafana)" ]; then
+		console "info" "This might take a few seconds, downloading the image..."
+		docker-machine ssh manager docker pull $image>/dev/null
+	fi
+	
 	if [ ! "$(docker-machine ssh manager docker ps | grep grafana)" ]; then
-		if [ ! "$(docker-machine ssh manager docker images | grep -w grafana/grafana)" ]; then
-			console "info" "This might take a few seconds, downloading the image..."
-			docker-machine ssh manager docker pull $image>/dev/null
-		fi
-
 		docker-machine ssh manager docker run -d --name grafana -p $ports $image>/dev/null
 	fi
 
@@ -393,12 +392,12 @@ open_visualizer()
 	local ports="8080:8080"
 	local image="dockersamples/visualizer"
 
-	if [ ! "$(docker-machine ssh manager docker ps | grep visual)" ]; then
-		if [ ! "$(docker-machine ssh manager docker images | grep -w dockersamples/visualizer)" ]; then
-			console "info" "This might take a few seconds, downloading the image..."
-			docker-machine ssh manager docker pull $image>/dev/null
-		fi
+	if [ ! "$(docker-machine ssh manager docker images | grep -w dockersamples/visualizer)" ]; then
+		console "info" "This might take a few seconds, downloading the image..."
+		docker-machine ssh manager docker pull $image>/dev/null
+	fi
 
+	if [ ! "$(docker-machine ssh manager docker ps | grep visual)" ]; then
 		docker-machine ssh manager docker run -d -ti --name visual -v $volumes -p $ports $image
 	fi
 	
