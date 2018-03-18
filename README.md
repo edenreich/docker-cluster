@@ -67,6 +67,25 @@ docker-cluster destroy all
 ```
 This command will delete all existing docker machines
 
+You can create your own presets(=stack files) inside of the presets folder(see default as an example).
+Once the preset is ready, run:
+```sh
+docker-cluster run --preset [preset-name]
+```
+
+## Monitoring and Visualising
+To monitor incomming requests, you can lunch grafana by typing(default credentials: admin/admin):
+```sh
+docker-cluster monitor
+```
+
+If you wish to visualize the swarm, run:
+```sh
+docker-cluster visual
+```
+
+
+## Testing
 To check the preformance of your cluster you can run:
 ```sh
 docker-cluster create --clients 2
